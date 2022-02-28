@@ -31,12 +31,18 @@ class InvertedResBlock(nn.Module):
         layers = []
         if expansion_ratio != 1:
             layers.append(ConvNormLReLU(in_ch, bottleneck, kernel_size=1, padding=0))
-        
-        # dw
-        layers.append(ConvNormLReLU(bottleneck, bottleneck, groups=bottleneck, bias=True))
-        # pw
-        layers.append(nn.Conv2d(bottleneck, out_ch, kernel_size=1, padding=0, bias=False))
-        layers.append(nn.GroupNorm(num_groups=1, num_channels=out_ch, affine=True))
+
+        layers.extend(
+            (
+                ConvNormLReLU(
+                    bottleneck, bottleneck, groups=bottleneck, bias=True
+                ),
+                nn.Conv2d(
+                    bottleneck, out_ch, kernel_size=1, padding=0, bias=False
+                ),
+                nn.GroupNorm(num_groups=1, num_channels=out_ch, affine=True),
+            )
+        )
 
         self.layers = nn.Sequential(*layers)
         

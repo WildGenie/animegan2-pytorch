@@ -25,10 +25,7 @@ def load_tf_weights(tf_path):
         saver.restore(sess, ckpt.model_checkpoint_path)
         print(f"Tensorflow model checkpoint {ckpt.model_checkpoint_path} loaded")
 
-        tf_weights = {}
-        for v in tf.trainable_variables():
-            tf_weights[v.name] = v.eval()
-    
+        tf_weights = {v.name: v.eval() for v in tf.trainable_variables()}
     return tf_weights
 
             
@@ -36,24 +33,24 @@ def convert_keys(k):
 
     # 1. divide tf weight name in three parts [block_idx, layer_idx, weight/bias]
     # 2. handle each part & merge into a pytorch model keys
-    
-    k = k.replace("Conv/", "Conv_0/").replace("LayerNorm/", "LayerNorm_0/")    
+
+    k = k.replace("Conv/", "Conv_0/").replace("LayerNorm/", "LayerNorm_0/")
     keys = k.split("/")[2:]
-    
+
     is_dconv = False
 
     # handle C block..
     if keys[0] == "C":
         if keys[1] in ["Conv_1", "LayerNorm_1"]:
             keys[1] = keys[1].replace("1", "5")
-        
+
         if len(keys) == 4:
             assert "r" in keys[1]
 
             if keys[1] == keys[2]:
                 is_dconv = True
                 keys[2] = "1.1"
-            
+
             block_c_maps = {
                 "1":  "1.2",
                 "Conv_1":  "2",
@@ -70,17 +67,17 @@ def convert_keys(k):
     # handle output block
     if "out" in keys[0]:
         keys[1] = "0"
-    
+
     # first part
     if keys[0] in ["A", "B", "C", "D", "E"]:
-        keys[0] = "block_" + keys[0].lower()        
-        
+        keys[0] = f"block_{keys[0].lower()}"        
+
     # second part
     if "LayerNorm_" in keys[1]:
         keys[1] = keys[1].replace("LayerNorm_", "") + ".2"
     if "Conv_" in keys[1]:
         keys[1] = keys[1].replace("Conv_", "") + ".1"
-        
+
     # third part
     keys[2] = {
         "weights:0": "weight",
@@ -89,14 +86,14 @@ def convert_keys(k):
         "gamma:0": "weight",
         "beta:0": "bias",
     }[keys[2]]
-        
+
     return ".".join(keys), is_dconv
 
 
 def convert_and_save(tf_checkpoint_path, save_name):
 
     tf_weights = load_tf_weights(tf_checkpoint_path)
-    
+
     torch_net = Generator()
     torch_weights = torch_net.state_dict()
 
@@ -116,8 +113,11 @@ def convert_and_save(tf_checkpoint_path, save_name):
 
         torch_converted_weights[torch_k] = converted_weight
 
-    assert sorted(list(torch_converted_weights)) == sorted(list(torch_weights)), f"some weights are missing"
-    torch_net.load_state_dict(torch_converted_weights)    
+    assert sorted(list(torch_converted_weights)) == sorted(
+        list(torch_weights)
+    ), "some weights are missing"
+
+    torch_net.load_state_dict(torch_converted_weights)
     torch.save(torch_net.state_dict(), save_name)
     print(f"PyTorch model saved at {save_name}")
     
